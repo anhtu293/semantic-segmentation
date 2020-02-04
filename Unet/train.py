@@ -3,11 +3,14 @@ import numpy as np
 from model import Unet
 import sys
 import skimage.io as io
+import cv2
+from cv2 import resize
 sys.path.append("../tools")
 from pycocotools.coco import COCO
 from pycocotools import mask
 from utils import img_generator, probaToBinaryMask
 import argparse
+from tqdm import tqdm
 
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -85,21 +88,25 @@ class Trainer:
                 if i_epoch %2 == 0 :
                     self.save_model(filename = './checkpoints/checkpoint_epoch-{}.ckpt'.format(i_epoch))
                 #train
-                catIDs = list(range(1,self.args.nb_classes+1))
-                for image in images_train:
+                catIDs = list(range(0,self.args.nb_classes))
+                print("Epoch {} \n".format(i_epoch))
+                print("Train \n")
+                for image in tqdm(images_train, total = 82783):
                     #create grouth truth map
-                    y = np.zeros((image['height'], image['width'], self.args.nb_classes))
+                    y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
-                        annIds = self.coco.getAnnIds(imgIds = image['id'], catIds = [cat])
+                        annIds = self.coco.getAnnIds(imgIds = image['id'], catIds = [cat+1])
                         anns = self.coco.loadAnns(annIds)
                         if len(anns) > 0:
                             for ann in anns:
                                 mask = self.coco.annToMask(ann)
+                                mask = resize(mask, (512,512), interpolation = cv2.INTER_NEAREST)
                                 y[:,:,cat] = np.logical_or(y[:,:,cat], mask).astype(np.float32)
                     #import image
                     img = io.imread("../train2014/{}".format(image["file_name"]))
+                    img = resize(img, (512, 512))
+                    # print(np.expand_dims(img, axis = 0).shape)
                     #feed forward + back propagation
-
                     self.sess.run(self.train_op, feed_dict = {
                         self.input_img : np.expand_dims(img, axis = 0),
                         self.label : np.expand_dims(y, axis = 0)
@@ -122,18 +129,21 @@ class Trainer:
                     union = np.sum(predicted_mask) + np.sum(y)
                     dice_train.append(2*intersection/union)
                 #evaluation
+                print("Evaluation \n")
                 for image in images_val:
                     #create grouth truth map
-                    y = np.zeros((image['height'], image['width'], self.args.nb_classes))
+                    y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
                         annIds = self.coco.getAnnIds(imgIds=image['id'], catIds=[cat])
                         anns = self.coco.loadAnns(annIds)
                         if len(anns) > 0:
                             for ann in anns:
                                 mask = self.coco.annToMask(ann)
+                                mask = resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
                                 y[:, :, cat] = np.logical_or(y[:, :, cat], mask).astype(np.float32)
                     #import image
                     img = io.imread("../train2014/{}".format(image["file_name"]))
+                    img = resize(img, (512,512))
                     #predict
                     softmax = np.sess.run(self.model.output_proba, feed_dict = {
                         self.input_img : np.expand_dims(img, axis = 0)
