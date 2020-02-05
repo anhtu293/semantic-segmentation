@@ -26,7 +26,8 @@ class Trainer:
         #save args
         self.args = args
         #init coco utils
-        self.coco = COCO("../annotations/instances_train2014.json")
+        self.coco_train = COCO("../annotations/instances_train2014.json")
+        self.coco_val = COCO("../annotations/instances_val2014.json")
         #init tensorflow session
         tf.reset_default_graph()
         config = tf.ConfigProto(allow_soft_placement=True)
@@ -82,38 +83,44 @@ class Trainer:
                 dice_train = []
                 dice_val = []
                 #streaming image
-                images_train = img_generator('images_train.json')
-                images_val = img_generator('images_val.json')
+                #images_train = img_generator('images_train.json')
+                #images_val = img_generator('images_val.json')
                 #checkpoint
                 self.save_model(filename = './checkpoints/checkpoint_epoch-{}.ckpt'.format(i_epoch))
                 #train
-                catIDs = list(range(0,self.args.nb_classes))
+                catIDs = list(range(1,self.args.nb_classes+1))
                 print("Epoch {} \n".format(i_epoch))
                 print("Train \n")
                 #minibatch
                 minibatch_image = []
                 minibatch_label = []
                 count = 0
-                for image in tqdm(images_train, total = 82783):
+                #Find images with categories
+                imgIds = self.coco_train.getImgIds(catIds = catIDs)
+                catIDs = [x-1 for x in catIDs]
+                for imgId in tqdm(imgIds):
                     count += 1
+                    #get image
+                    image = self.coco_train.loadImgs([imgId])
                     #create grouth truth map
                     y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
-                        annIds = self.coco.getAnnIds(imgIds = image['id'], catIds = [cat+1])
-                        anns = self.coco.loadAnns(annIds)
+                        print(cat)
+                        annIds = self.coco_train.getAnnIds(imgIds = image[0]['id'], catIds = [cat+1])
+                        anns = self.coco_train.loadAnns(annIds)
                         if len(anns) > 0:
                             for ann in anns:
-                                mask = self.coco.annToMask(ann)
+                                mask = self.coco_train.annToMask(ann)
                                 mask = resize(mask, (512,512), interpolation = cv2.INTER_NEAREST)
                                 y[:,:,cat] = np.logical_or(y[:,:,cat], mask).astype(np.float32)
                     #import image
-                    img = io.imread("../train2014/{}".format(image["file_name"]))
+                    img = io.imread("../train2014/{}".format(image[0]["file_name"]))
                     img = resize(img, (512, 512))
                     if img.shape == (512,512):
                         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                     minibatch_image.append(img)
                     minibatch_label.append(y)
-                    if len(minibatch_image) == self.args.batch_size or count == 82783:
+                    if len(minibatch_image) == self.args.batch_size or count == len(imgIds):
                         # get loss training
                         loss_train.append(self.sess.run(self.loss, feed_dict={
                             self.input_img: np.asarray(minibatch_image),
@@ -141,20 +148,26 @@ class Trainer:
                         minibatch_label.clear()
                         minibatch_image.clear()
                 #evaluation
+                #Find image with categories
+                catIDs = list(range(1, self.args.nb_classes + 1))
+                imgIds = self.coco_val.getImgIds(catIds=catIDs)
+                catIDs = [x-1 for x in catIDs]
                 print("Evaluation \n")
-                for image in images_val:
+                for imgId in tqdm(imgIds):
+                    #get image
+                    image = self.coco_val.loadImgs([imgId])
                     #create grouth truth map
                     y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
-                        annIds = self.coco.getAnnIds(imgIds=image['id'], catIds=[cat])
-                        anns = self.coco.loadAnns(annIds)
+                        annIds = self.coco_val.getAnnIds(imgIds=image[0]['id'], catIds=[cat])
+                        anns = self.coco_val.loadAnns(annIds)
                         if len(anns) > 0:
                             for ann in anns:
-                                mask = self.coco.annToMask(ann)
+                                mask = self.coco_val.annToMask(ann)
                                 mask = resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
                                 y[:, :, cat] = np.logical_or(y[:, :, cat], mask).astype(np.float32)
                     #import image
-                    img = io.imread("../train2014/{}".format(image["file_name"]))
+                    img = io.imread("../train2014/{}".format(image[0]["file_name"]))
                     img = resize(img, (512,512))
                     if img.shape == (512,512):
                         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
@@ -165,7 +178,7 @@ class Trainer:
                     #get accuracy val
                     predicted_mask = probaToBinaryMask(softmax)
                     nb_TP_bit = np.sum(np.logical_and(predicted_mask, y))
-                    np_total_bit = image["height"]*image["width"]*self.args.nb_classes
+                    np_total_bit = 512*512*self.args.nb_classes
                     accuracy_val.append(append(nb_TP_bit/nb_total_bit))
                     #get dice val
                     intersection = nb_TP_bit
