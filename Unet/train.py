@@ -16,7 +16,7 @@ def arg_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nb_classes", default = "10", type = int, help = "number of categories")
     parser.add_argument("--epochs", default = "10", type = int, help = "number of epochs")
-    parser.add_argument("--batch_size", default = "1", type = int, help = "size of miniibatch")
+    parser.add_argument("--batch_size", default = "2", type = int, help = "size of miniibatch")
     parser.add_argument("--learning_rate", default = "0.001", type = float, help = "learning_rate")
     parser.add_argument("--loss", default = "crossentropy", help = "type of loss function : crossentropy or dice")
     args = parser.parse_args()
@@ -90,7 +90,12 @@ class Trainer:
                 catIDs = list(range(0,self.args.nb_classes))
                 print("Epoch {} \n".format(i_epoch))
                 print("Train \n")
+                #minibatch
+                minibatch_image = []
+                minibatch_label = []
+                count = 0
                 for image in tqdm(images_train, total = 82783):
+                    count += 1
                     #create grouth truth map
                     y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
@@ -106,29 +111,35 @@ class Trainer:
                     img = resize(img, (512, 512))
                     if img.shape == (512,512):
                         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-                    # print(np.expand_dims(img, axis = 0).shape)
-                    #feed forward + back propagation
-                    self.sess.run(self.train_op, feed_dict = {
-                        self.input_img : np.expand_dims(img, axis = 0),
-                        self.label : np.expand_dims(y, axis = 0)
-                    })
-                    #get loss training
-                    loss_train.append(self.sess.run(self.loss, feed_dict = {
-                        self.input_img : np.expand_dims(img, axis = 0),
-                        self.label : np.expand_dims(y, axis = 0)
-                    }))
-                    #get accuracy training
-                    softmax = self.sess.run(self.model.output_proba, feed_dict = {
-                        self.input_img : np.expand_dims(img, axis = 0)
-                    })[0]
-                    predicted_mask =probaToBinaryMask(softmax)
-                    nb_TP_bit = np.sum(np.logical_and(predicted_mask,y))
-                    nb_total_bit = image["width"]*image["height"]*self.args.nb_classes
-                    accuracy_train.append(nb_TP_bit/nb_total_bit)
-                    #get dice coef training
-                    intersection = nb_TP_bit
-                    union = np.sum(predicted_mask) + np.sum(y)
-                    dice_train.append(2*intersection/union)
+                    minibatch_image.append(img)
+                    minibatch_label.append(y)
+                    if len(minibatch_image) == self.args.batch_size or count == 82783:
+                        # get loss training
+                        loss_train.append(self.sess.run(self.loss, feed_dict={
+                            self.input_img: np.asarray(minibatch_image),
+                            self.label: np.asarray(minibatch_label)
+                        }))
+                        #feed forward + back propagation
+                        self.sess.run(self.train_op, feed_dict = {
+                            self.input_img : np.asarray(minibatch_image),
+                            self.label : np.asarray(minibatch_label)
+                        })
+                        #get accuracy training
+                        softmax = self.sess.run(self.model.output_proba, feed_dict = {
+                            self.input_img : np.asarray(minibatch_image)
+                        })
+                        nb_total_bit = 512 * 512 * self.args.nb_classes
+                        for i_batch in range(softmax.shape[0]):
+                            predicted_mask =probaToBinaryMask(softmax[i_batch])
+                            nb_TP_bit = np.sum(np.logical_and(predicted_mask,minibatch_label[i_batch]))
+                            accuracy_train.append(nb_TP_bit/nb_total_bit)
+                            #get dice coef training
+                            intersection = nb_TP_bit
+                            union = np.sum(predicted_mask) + np.sum(minibatch_label[i_batch])
+                            dice_train.append(2*intersection/union)
+                        #reset minibatch
+                        minibatch_label.clear()
+                        minibatch_image.clear()
                 #evaluation
                 print("Evaluation \n")
                 for image in images_val:
