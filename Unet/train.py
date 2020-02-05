@@ -33,11 +33,11 @@ class Trainer:
         config.gpu_options.allow_growth = True
         self.sess = tf.Session(config = config)
         #init model
-        self.input_img = tf.placeholder(tf.float32, shape = (1,None,None,3))
-        self.label = tf.placeholder(tf.float32, shape = (1,None,None,args.nb_classes))
+        self.input_img = tf.placeholder(tf.float32, shape = (None,None,None,3))
+        self.label = tf.placeholder(tf.float32, shape = (None,None,None,args.nb_classes))
         self.model = Unet(input_img = self.input_img, nb_classes = args.nb_classes)
         #define loss : Cross Entropy and Dice
-        with tf.variable_scope('train'):
+        with tf.variable_scope('optimization'):
             with tf.variable_scope('loss'):
                 if args.loss == 'crossentropy':
                     """logits = tf.reshape(self.model.output_log, [-1, args.nb_classes])
@@ -85,8 +85,7 @@ class Trainer:
                 images_train = img_generator('images_train.json')
                 images_val = img_generator('images_val.json')
                 #checkpoint
-                if i_epoch %2 == 0 :
-                    self.save_model(filename = './checkpoints/checkpoint_epoch-{}.ckpt'.format(i_epoch))
+                self.save_model(filename = './checkpoints/checkpoint_epoch-{}.ckpt'.format(i_epoch))
                 #train
                 catIDs = list(range(0,self.args.nb_classes))
                 print("Epoch {} \n".format(i_epoch))
@@ -105,6 +104,8 @@ class Trainer:
                     #import image
                     img = io.imread("../train2014/{}".format(image["file_name"]))
                     img = resize(img, (512, 512))
+                    if img.shape == (512,512):
+                        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                     # print(np.expand_dims(img, axis = 0).shape)
                     #feed forward + back propagation
                     self.sess.run(self.train_op, feed_dict = {
@@ -144,6 +145,8 @@ class Trainer:
                     #import image
                     img = io.imread("../train2014/{}".format(image["file_name"]))
                     img = resize(img, (512,512))
+                    if img.shape == (512,512):
+                        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                     #predict
                     softmax = np.sess.run(self.model.output_proba, feed_dict = {
                         self.input_img : np.expand_dims(img, axis = 0)
