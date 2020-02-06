@@ -1,3 +1,4 @@
 /train2014/
 /annotations/
 /Unet/checkpoints/
+/val2014/

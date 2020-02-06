@@ -105,7 +105,6 @@ class Trainer:
                     #create grouth truth map
                     y = np.zeros((512, 512, self.args.nb_classes))
                     for cat in catIDs:
-                        print(cat)
                         annIds = self.coco_train.getAnnIds(imgIds = image[0]['id'], catIds = [cat+1])
                         anns = self.coco_train.loadAnns(annIds)
                         if len(anns) > 0:
@@ -167,7 +166,7 @@ class Trainer:
                                 mask = resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
                                 y[:, :, cat] = np.logical_or(y[:, :, cat], mask).astype(np.float32)
                     #import image
-                    img = io.imread("../train2014/{}".format(image[0]["file_name"]))
+                    img = io.imread("../val2014/{}".format(image[0]["file_name"]))
                     img = resize(img, (512,512))
                     if img.shape == (512,512):
                         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
