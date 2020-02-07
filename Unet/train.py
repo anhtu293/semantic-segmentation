@@ -171,7 +171,7 @@ class Trainer:
                     if img.shape == (512,512):
                         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                     #predict
-                    softmax = np.sess.run(self.model.output_proba, feed_dict = {
+                    softmax = self.sess.run(self.model.output_proba, feed_dict = {
                         self.input_img : np.expand_dims(img, axis = 0)
                     })
                     #get accuracy val
@@ -203,6 +203,7 @@ class Trainer:
                 summary = self.sess.run(self.tf_eval_dice_summary, feed_dict = {
                     self.tf_eval_dice : np.mean(np.asarray(dice_val))
                 })
+        self.save_model(filename='./model-{}.ckpt'.format(i_epoch))
 
 if __name__ == "__main__":
     args = arg_parser()
