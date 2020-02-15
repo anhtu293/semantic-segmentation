@@ -97,6 +97,7 @@ class FCN:
                 self.sum = tf.reduce_sum(x,0)
                 self.up = tf.layers.Conv2DTranspose(filters=self.nb_classes, kernel_size=(32, 32), strides=(16, 16),
                                                            padding='valid', name='up')(self.sum)
+                self.output_proba = softmax(self.out)
                 self.out = tf.image.crop_and_resize(self.deconv_fr, boxes=(1, 4), box_ind=None,
                                                          crop_size=crop_size,
                                                          method='bilinear')
